@@ -2,8 +2,6 @@ import os
 import sys
 from google.colab import drive
 
-# Mount Google Drive
-#drive.mount('/content/drive')
 
 # Setup cache directory
 cache_dir = "/content/huggingface_cache"
