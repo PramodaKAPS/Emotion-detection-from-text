@@ -18,7 +18,8 @@ def main():
     cache_dir = setup_cache_directory()
     
     # Training configuration
-    save_path = "/content/drive/MyDrive/emotion_model"
+    save_path = "./emotion_model"  # Local folder on droplet
+    os.makedirs(save_dir, exist_ok=True)  # Create if not exists
     selected_emotions = [
         "anger", "sadness", "joy", "disgust", "fear", 
         "surprise", "gratitude", "remorse", "curiosity", "neutral"
