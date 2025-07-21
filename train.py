@@ -7,7 +7,7 @@ from model_utils import (
     compile_and_train_model, evaluate_and_save_model
 )
 
-def train_emotion_model(cache_dir, save_path, selected_emotions, num_train=800, 
+def train_emotion_model(cache_dir, save_path, selected_emotions, num_train=2000, 
                        num_epochs=1, batch_size=16):
     """
     Complete training pipeline for emotion detection model
