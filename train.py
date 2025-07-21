@@ -74,7 +74,7 @@ if __name__ == "__main__":
     cache_dir = "/content/huggingface_cache"
     os.makedirs(cache_dir, exist_ok=True)
     #save_path = "/content/drive/MyDrive/emotion_model"
-    save_dir = "./emotion_model"  # Local folder on droplet
+    save_path = "/root/emotion_model"  # Or any local path on the Droplet
     os.makedirs(save_dir, exist_ok=True)  # Create if not exists
     selected_emotions = [
         "anger", "sadness", "joy", "disgust", "fear", 
