@@ -72,7 +72,10 @@ def train_emotion_model(cache_dir, save_path, selected_emotions, num_train=800,
 if __name__ == "__main__":
     # Training configuration
     cache_dir = "/content/huggingface_cache"
-    save_path = "/content/drive/MyDrive/emotion_model"
+    os.makedirs(cache_dir, exist_ok=True)
+    #save_path = "/content/drive/MyDrive/emotion_model"
+    save_dir = "./emotion_model"  # Local folder on droplet
+    os.makedirs(save_dir, exist_ok=True)  # Create if not exists
     selected_emotions = [
         "anger", "sadness", "joy", "disgust", "fear", 
         "surprise", "gratitude", "remorse", "curiosity", "neutral"
