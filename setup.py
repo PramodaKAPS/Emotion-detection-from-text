@@ -38,14 +38,14 @@ def setup_cache_directory():
     
     return cache_dir
 
-def mount_google_drive():
+'''def mount_google_drive():
     """Mount Google Drive for saving models"""
     try:
         from google.colab import drive
         drive.mount('/content/drive')
         print("✅ Google Drive mounted successfully!")
     except ImportError:
-        print("⚠️ Not in Google Colab environment - skipping drive mount")
+        print("⚠️ Not in Google Colab environment - skipping drive mount")'''
 
 if __name__ == "__main__":
     install_requirements()
