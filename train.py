@@ -8,7 +8,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from data_utils import load_and_filter_goemotions, oversample_training_data, prepare_tokenized_datasets
 from model_utils import create_tf_datasets, setup_model_and_optimizer, compile_and_train, save_model_and_tokenizer, create_rnn_model, evaluate_model
 
-def train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5, batch_size=16, learning_rate=2e-5, model_type="DistilBERT", input_length=100, vocab_size=10000, embedding_dim=128):
+def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=3, batch_size=32, learning_rate=3e-5, model_type="DistilBERT", input_length=100, vocab_size=10000, embedding_dim=128):
     print(f"Starting training for {model_type}...")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
@@ -27,7 +27,7 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5
         tf_train, tf_val, tf_test = create_tf_datasets(tokenized_train, tokenized_valid, tokenized_test, tokenizer, sel_indices, batch_size)
         model, optimizer = setup_model_and_optimizer("distilbert-base-uncased", len(emotions), tf_train, epochs, learning_rate, cache_dir=cache_dir)
     else:
-        # For RNN models, use Keras Tokenizer
+        # For RNN models (not used here, but kept for completeness)
         tokenizer = Tokenizer(num_words=vocab_size, oov_token="<OOV>")
         tokenizer.fit_on_texts(oversampled_train_df["text"])
         
@@ -35,7 +35,6 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5
         valid_sequences = pad_sequences(tokenizer.texts_to_sequences(valid_df["text"]), maxlen=input_length, padding='post')
         test_sequences = pad_sequences(tokenizer.texts_to_sequences(test_df["text"]), maxlen=input_length, padding='post')
         
-        # Remap labels to 0-9 range
         train_labels = np.array([mapping[label] for label in oversampled_train_df["label"].values])
         valid_labels = np.array([mapping[label] for label in valid_df["label"].values])
         test_labels = np.array([mapping[label] for label in test_df["label"].values])
@@ -60,18 +59,7 @@ if __name__ == "__main__":
     save_path = "/root/emotion_model"
     emotions = ["anger", "sadness", "joy", "disgust", "fear", "surprise", "gratitude", "remorse", "curiosity", "neutral"]
 
-    # Train multiple models and collect metrics
-    model_types = ["Bi-LSTM", "LSTM", "Bi-GRU", "GRU", "DistilBERT"]
-    model_results = []
-
-    for model_type in model_types:
-        print(f"\nTraining {model_type}...")
-        metrics = train_emotion_model(cache_dir, save_path, emotions, model_type=model_type)
-        model_results.append({"Model": model_type, **metrics})
-
-    # Print Models Comparison Table
-    print("\nModels Evaluation Metrics Comparison")
-    print("| Models | Accuracy | F1 Score | Precision | Recall |")
-    print("|--------|----------|----------|-----------|--------|")
-    for res in model_results:
-        print(f"| {res['Model']} | {res['accuracy']:.2f} | {res['f1']:.2f} | {res['precision']:.2f} | {res['recall']:.2f} |")
+    # Train the best model (DistilBERT Model-3 config) on full dataset with 3 epochs
+    metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=3, batch_size=32, learning_rate=3e-5, model_type="DistilBERT")
+    print("\nFinal Metrics for Best Model on Full Dataset:")
+    print(f"Accuracy: {metrics['accuracy']:.2f} | F1 Score: {metrics['f1']:.2f} | Precision: {metrics['precision']:.2f} | Recall: {metrics['recall']:.2f}")
