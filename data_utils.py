@@ -1,4 +1,14 @@
+import pandas as pd
+from datasets import load_dataset, Dataset
+from imblearn.over_sampling import RandomOverSampler
+import numpy as np
+
+# Section 1: Dataset Loading and Filtering
 def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
+    """
+    Load and filter the GoEmotions dataset for selected emotions.
+    If num_train <= 0, use the full filtered train set.
+    """
     print("Loading GoEmotions dataset...")
     dataset = load_dataset("go_emotions", "simplified", cache_dir=cache_dir)
 
@@ -7,7 +17,7 @@ def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
     test_df = pd.DataFrame(dataset["test"])
 
     emotion_names = dataset["train"].features["labels"].feature.names
-    selected_indices = [emotion_names.index(e) for e in selected_emotions if e in emotion_names]  # Fix: Skip if emotion not in dataset
+    selected_indices = [emotion_names.index(e) for e in selected_emotions if e in emotion_names]
 
     print("Selected emotions:", selected_emotions)
     print("Selected indices:", selected_indices)
@@ -22,11 +32,11 @@ def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
     valid_df = filter_emotions(valid_df)
     test_df = filter_emotions(test_df)
 
-    train_df["label"] = train_df["labels"].apply(lambda lbls: lbls[0] if lbls else -1)  # Fix: Handle empty labels
+    train_df["label"] = train_df["labels"].apply(lambda lbls: lbls[0] if lbls else -1)
     valid_df["label"] = valid_df["labels"].apply(lambda lbls: lbls[0] if lbls else -1)
     test_df["label"] = test_df["labels"].apply(lambda lbls: lbls[0] if lbls else -1)
 
-    train_df = train_df[train_df["label"] != -1]  # Remove invalid
+    train_df = train_df[train_df["label"] != -1]
     valid_df = valid_df[valid_df["label"] != -1]
     test_df = test_df[test_df["label"] != -1]
 
@@ -34,10 +44,9 @@ def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
     valid_df = valid_df[["text", "label"]]
     test_df = test_df[["text", "label"]]
 
-    # Handle full dataset
+    # Handle full dataset (skip head if num_train <= 0)
     if num_train > 0:
         train_df = train_df.head(num_train)
-    # Else use all
 
     print(f"Filtered train data shape: {train_df.shape}")
     print(f"Filtered validation data shape: {valid_df.shape}")
@@ -47,3 +56,35 @@ def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
         raise ValueError("Filtered train data is empty. Check selected emotions match dataset labels.")
     
     return train_df, valid_df, test_df, selected_indices
+
+# Section 2: Oversampling for Class Balance
+def oversample_training_data(train_df):
+    """
+    Oversample the training data to balance emotion classes using RandomOverSampler.
+    """
+    X = train_df["text"].values.reshape(-1, 1)
+    y = train_df["label"]
+    ros = RandomOverSampler(sampling_strategy='not majority', random_state=42)
+    X_resampled, y_resampled = ros.fit_resample(X, y)
+    df_resampled = pd.DataFrame({"text": X_resampled.flatten(), "label": y_resampled})
+    print("Oversampled training data distribution:")
+    print(df_resampled["label"].value_counts())
+    return df_resampled
+
+# Section 3: Tokenization for Transformer Models
+def prepare_tokenized_datasets(tokenizer, train_df, valid_df, test_df):
+    """
+    Tokenize datasets for DistilBERT or similar models.
+    """
+    def tokenize(batch):
+        return tokenizer(batch["text"], truncation=True, padding=True)
+
+    train_dataset = Dataset.from_pandas(train_df)
+    valid_dataset = Dataset.from_pandas(valid_df)
+    test_dataset = Dataset.from_pandas(test_df)
+
+    tokenized_train = train_dataset.map(tokenize, batched=True)
+    tokenized_valid = valid_dataset.map(tokenize, batched=True)
+    tokenized_test = test_dataset.map(tokenize, batched=True)
+
+    return tokenized_train, tokenized_valid, tokenized_test
