@@ -19,6 +19,8 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5
     
     is_distilbert = model_type == "DistilBERT"
     
+    mapping = {old: new for new, old in enumerate(sel_indices)}  # Label mapping for all models
+    
     if is_distilbert:
         tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", cache_dir=cache_dir)
         tokenized_train, tokenized_valid, tokenized_test = prepare_tokenized_datasets(tokenizer, oversampled_train_df, valid_df, test_df)
@@ -33,9 +35,10 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5
         valid_sequences = pad_sequences(tokenizer.texts_to_sequences(valid_df["text"]), maxlen=input_length, padding='post')
         test_sequences = pad_sequences(tokenizer.texts_to_sequences(test_df["text"]), maxlen=input_length, padding='post')
         
-        train_labels = oversampled_train_df["label"].values
-        valid_labels = valid_df["label"].values
-        test_labels = test_df["label"].values
+        # Remap labels to 0-9 range
+        train_labels = np.array([mapping[label] for label in oversampled_train_df["label"].values])
+        valid_labels = np.array([mapping[label] for label in valid_df["label"].values])
+        test_labels = np.array([mapping[label] for label in test_df["label"].values])
         
         tf_train = tf.data.Dataset.from_tensor_slices((train_sequences, train_labels)).shuffle(len(train_sequences)).batch(batch_size)
         tf_val = tf.data.Dataset.from_tensor_slices((valid_sequences, valid_labels)).batch(batch_size)
