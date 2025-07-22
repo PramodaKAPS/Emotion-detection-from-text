@@ -1,92 +1,37 @@
-"""
-Main training script for emotion detection model
-"""
-from data_utils import load_and_filter_goemotions, oversample_training_data, prepare_datasets_for_training
-from model_utils import (
-    load_tokenizer, create_tensorflow_datasets, create_model_and_optimizer,
-    compile_and_train_model, evaluate_and_save_model
-)
+import os
+from data_utils import load_and_filter_goemotions, oversample_training_data, prepare_tokenized_datasets
+from model_utils import create_tf_datasets, setup_model_and_optimizer, compile_and_train, save_model_and_tokenizer
 
-def train_emotion_model(cache_dir, save_path, selected_emotions, num_train=2000, 
-                       num_epochs=1, batch_size=16):
-    """
-    Complete training pipeline for emotion detection model
+def train_emotion_model(cache_dir, save_dir, emotions, train_size=2000, epochs=1, batch_size=16):
+    print("Starting training...")
+    # Create cache directory
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir, exist_ok=True)
+    print(f"Cache directory ready: {cache_dir}")
+
+    train_df, valid_df, test_df, sel_indices = load_and_filter_goemotions(cache_dir, emotions, train_size)
+    oversampled_train_df = oversample_training_data(train_df)
     
-    Args:
-        cache_dir (str): Directory for caching datasets and models
-        save_path (str): Path to save trained model
-        selected_emotions (list): List of emotion names to train on
-        num_train (int): Number of training samples
-        num_epochs (int): Number of training epochs
-        batch_size (int): Batch size for training
-    """
-    try:
-        print("Starting emotion detection model training...")
-        
-        # Load and filter dataset
-        train_df, valid_df, test_df, selected_indices = load_and_filter_goemotions(
-            cache_dir, selected_emotions, num_train
-        )
-        
-        # Oversample training data
-        emotions_train = oversample_training_data(train_df)
-        
-        # Load tokenizer
-        model_checkpoint = "distilbert-base-uncased"
-        tokenizer = load_tokenizer(model_checkpoint, cache_dir)
-        
-        # Prepare datasets
-        tokenized_train, tokenized_val, tokenized_test = prepare_datasets_for_training(
-            emotions_train, valid_df, test_df, tokenizer
-        )
-        
-        # Create TensorFlow datasets
-        tf_train_dataset, tf_validation_dataset, tf_test_dataset = create_tensorflow_datasets(
-            tokenized_train, tokenized_val, tokenized_test, 
-            tokenizer, selected_indices, batch_size
-        )
-        
-        # Create model and optimizer
-        model, optimizer = create_model_and_optimizer(
-            model_checkpoint, cache_dir, len(selected_emotions), 
-            tf_train_dataset, num_epochs
-        )
-        
-        # Train model
-        model = compile_and_train_model(
-            model, optimizer, tf_train_dataset, tf_validation_dataset, num_epochs
-        )
-        
-        # Evaluate and save model
-        test_results = evaluate_and_save_model(
-            model, tf_test_dataset, tokenizer, save_path
-        )
-        
-        print("✅ Training completed successfully!")
-        return test_results
-        
-    except Exception as e:
-        print(f"❌ An error occurred during training: {e}")
-        raise
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", cache_dir=cache_dir)
+    
+    tokenized_train, tokenized_valid, tokenized_test = prepare_tokenized_datasets(tokenizer, oversampled_train_df, valid_df, test_df)
+
+    tf_train, tf_val, tf_test = create_tf_datasets(tokenized_train, tokenized_valid, tokenized_test, tokenizer, sel_indices, batch_size)
+
+    model, optimizer = setup_model_and_optimizer("distilbert-base-uncased", len(emotions), tf_train, epochs, cache_dir=cache_dir)
+
+    model = compile_and_train(model, optimizer, tf_train, tf_val, epochs)
+
+    save_model_and_tokenizer(model, tokenizer, save_dir)
+
+    results = model.evaluate(tf_test)
+    print(f"Evaluation results: {results}")
+    return results
 
 if __name__ == "__main__":
-    # Training configuration
-    cache_dir = "/content/huggingface_cache"
-    os.makedirs(cache_dir, exist_ok=True)
-    #save_path = "/content/drive/MyDrive/emotion_model"
-    save_path = "/root/emotion_model"  # Or any local path on the Droplet
-    os.makedirs(save_dir, exist_ok=True)  # Create if not exists
-    selected_emotions = [
-        "anger", "sadness", "joy", "disgust", "fear", 
-        "surprise", "gratitude", "remorse", "curiosity", "neutral"
-    ]
-    
-    # Run training
-    train_emotion_model(
-        cache_dir=cache_dir,
-        save_path=save_path,
-        selected_emotions=selected_emotions,
-        num_train=800,
-        num_epochs=1,
-        batch_size=16
-    )
+    cache_dir = "/root/huggingface_cache"  # Local path on Droplet
+    save_dir = "/root/emotion_model"  # Local save path (no Google Drive)
+    emotions = ["anger", "sadness", "joy", "disgust", "fear", "surprise", "gratitude", "remorse", "curiosity", "neutral"]
+
+    train_emotion_model(cache_dir, save_dir, emotions, train_size=2000, epochs=1, batch_size=16)
