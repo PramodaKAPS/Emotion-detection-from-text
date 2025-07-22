@@ -44,18 +44,19 @@ if __name__ == "__main__":
     save_path = "/root/emotion_model"
     emotions = ["anger", "sadness", "joy", "disgust", "fear", "surprise", "gratitude", "remorse", "curiosity", "neutral"]
 
-    # Run multiple experiments like in the report
-    configs = [
-        {"model_name": "Model-1", "num_train": 5000, "epochs": 2, "learning_rate": 5e-5, "batch_size": 16},
-        {"model_name": "Model-2", "num_train": 5000, "epochs": 4, "learning_rate": 5e-5, "batch_size": 16},
-        {"model_name": "Model-3", "num_train": 5000, "epochs": 4, "learning_rate": 3e-5, "batch_size": 32},
-    ]
+   # Run multiple experiments 
+configs = [
+    {"model_name": "Model-1", "num_train": 5000, "epochs": 2, "learning_rate": 5e-5, "batch_size": 16},
+    {"model_name": "Model-2", "num_train": 5000, "epochs": 4, "learning_rate": 5e-5, "batch_size": 16},
+    {"model_name": "Model-3", "num_train": 5000, "epochs": 4, "learning_rate": 3e-5, "batch_size": 32},
+]
 
-    results = []
-    for conf in configs:
-        print(f"\nRunning {conf['model_name']} with epochs={conf['epochs']}, lr={conf['learning_rate']}, batch={conf['batch_size']}")
-        metrics = train_emotion_model(cache_dir, save_path, emotions, **conf)
-        results.append({**conf, **metrics})
+results = []
+for conf in configs:
+    model_name = conf.pop('model_name')  # Remove 'model_name' and store it for printing
+    print(f"\nRunning {model_name} with epochs={conf['epochs']}, lr={conf['learning_rate']}, batch={conf['batch_size']}")
+    metrics = train_emotion_model(cache_dir, save_path, emotions, **conf)
+    results.append({"model_name": model_name, **conf, **metrics})
 
     # Print table like in the report
     print("\nModels Evaluation Metrics Comparison")
