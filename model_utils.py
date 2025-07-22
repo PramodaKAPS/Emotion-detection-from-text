@@ -2,8 +2,9 @@ import os
 import numpy as np
 import tensorflow as tf
 from transformers import TFDistilBertForSequenceClassification, create_optimizer, DataCollatorWithPadding, AutoTokenizer
-from sklearn.metrics import confusion_matrix
-import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, Bidirectional, LSTM, GRU, Dense
 
 # Section 1: Dataset Creation Utilities
 def create_tf_datasets(tokenized_train, tokenized_valid, tokenized_test, tokenizer, selected_indices, batch_size=16):
@@ -37,7 +38,21 @@ def create_tf_datasets(tokenized_train, tokenized_valid, tokenized_test, tokeniz
     )
     return tf_train, tf_val, tf_test
 
-# Section 2: Model Setup and Optimization
+# Section 2: Model Creation Utilities
+def create_rnn_model(model_type, vocab_size, embedding_dim, input_length, num_labels):
+    model = Sequential()
+    model.add(Embedding(vocab_size, embedding_dim, input_length=input_length))
+    if model_type == "Bi-LSTM":
+        model.add(Bidirectional(LSTM(128)))
+    elif model_type == "LSTM":
+        model.add(LSTM(128))
+    elif model_type == "Bi-GRU":
+        model.add(Bidirectional(GRU(128)))
+    elif model_type == "GRU":
+        model.add(GRU(128))
+    model.add(Dense(num_labels, activation='softmax'))
+    return model
+
 def setup_model_and_optimizer(model_name, num_labels, tf_train_dataset, epochs=1, lr=2e-5, cache_dir=None):
     model = TFDistilBertForSequenceClassification.from_pretrained(model_name, num_labels=num_labels, cache_dir=cache_dir)
     steps = len(tf_train_dataset) * epochs
@@ -51,38 +66,28 @@ def compile_and_train(model, optimizer, tf_train_dataset, tf_val_dataset, epochs
     return model
 
 # Section 4: Model Saving
-def save_model_and_tokenizer(model, tokenizer, path):
+def save_model_and_tokenizer(model, tokenizer, path, is_distilbert=False):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
-    model.save_pretrained(path)
-    tokenizer.save_pretrained(path)
-    print(f"Model and tokenizer saved at {path}")
+    if is_distilbert:
+        model.save_pretrained(path)
+        tokenizer.save_pretrained(path)
+    else:
+        model.save(path)
+    print(f"Model saved at {path}")
 
-# Section 5: Evaluation and Confusion Matrix (New Addition)
-def evaluate_model(model, tf_test, emotions):
-    """
-    Evaluate the model and generate confusion matrix for the best-fitted model.
-    """
+# Section 5: Evaluation Metrics
+def evaluate_model(model, tf_test):
     y_true = np.concatenate([y for x, y in tf_test], axis=0)
-    y_pred = np.argmax(model.predict(tf_test).logits, axis=1)
+    y_pred = np.argmax(model.predict(tf_test).logits, axis=1) if hasattr(model.predict(tf_test), 'logits') else np.argmax(model.predict(tf_test), axis=1)
     
-    # Generate confusion matrix
-    cm = confusion_matrix(y_true, y_pred)
+    accuracy = accuracy_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred, average='weighted')
+    precision = precision_score(y_true, y_pred, average='weighted')
+    recall = recall_score(y_true, y_pred, average='weighted')
     
-    # Plot and save confusion matrix
-    plt.figure(figsize=(10, 8))
-    plt.imshow(cm, interpolation='nearest', cmap='Blues')
-    plt.title('Confusion Matrix for Best-Fitted Model')
-    plt.colorbar()
-    tick_marks = np.arange(len(emotions))
-    plt.xticks(tick_marks, emotions, rotation=45)
-    plt.yticks(tick_marks, emotions)
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-    plt.savefig(os.path.join(path, 'confusion_matrix.png'))  # Save to model path
-    plt.show()
-    plt.close()
+    return {"accuracy": accuracy, "f1": f1, "precision": precision, "recall": recall}
+
     
-    print("Confusion matrix generated and saved.")
-    return cm
+
 
