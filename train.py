@@ -1,4 +1,6 @@
 import os
+import tensorflow as tf
+
 import numpy as np
 from model_utils import (create_tf_datasets, setup_model_and_optimizer, compile_and_train, save_model_and_tokenizer,
                          evaluate_model, create_rnn_model)
