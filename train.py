@@ -16,14 +16,12 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=3, b
 
     train_df, valid_df, test_df, sel_indices = load_and_filter_goemotions(cache_dir, emotions, num_train)
     
-    # Fix for full dataset: If num_train <= 0, use all data (skip head)
-    if num_train <= 0:
-        print("Using full training dataset (no row limit).")
-    else:
+    # Fix for full dataset: If num_train <= 0, use all filtered data (skip head limit)
+    if num_train > 0:
         train_df = train_df.head(num_train)
     
     if train_df.empty:
-        raise ValueError("Train DataFrame is empty. Check filtering or num_train value.")
+        raise ValueError("Train DataFrame is empty after filtering. Check selected emotions or dataset loading.")
     
     oversampled_train_df = oversample_training_data(train_df)
     
@@ -72,3 +70,4 @@ if __name__ == "__main__":
     metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=3, batch_size=32, learning_rate=3e-5, model_type="DistilBERT")
     print("\nFinal Metrics for Best Model on Full Dataset:")
     print(f"Accuracy: {metrics['accuracy']:.2f} | F1 Score: {metrics['f1']:.2f} | Precision: {metrics['precision']:.2f} | Recall: {metrics['recall']:.2f}")
+
