@@ -15,6 +15,16 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=3, b
     print(f"Cache directory ready: {cache_dir}")
 
     train_df, valid_df, test_df, sel_indices = load_and_filter_goemotions(cache_dir, emotions, num_train)
+    
+    # Fix for full dataset: If num_train <= 0, use all data (skip head)
+    if num_train <= 0:
+        print("Using full training dataset (no row limit).")
+    else:
+        train_df = train_df.head(num_train)
+    
+    if train_df.empty:
+        raise ValueError("Train DataFrame is empty. Check filtering or num_train value.")
+    
     oversampled_train_df = oversample_training_data(train_df)
     
     is_distilbert = model_type == "DistilBERT"
@@ -27,7 +37,6 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=3, b
         tf_train, tf_val, tf_test = create_tf_datasets(tokenized_train, tokenized_valid, tokenized_test, tokenizer, sel_indices, batch_size)
         model, optimizer = setup_model_and_optimizer("distilbert-base-uncased", len(emotions), tf_train, epochs, learning_rate, cache_dir=cache_dir)
     else:
-        # For RNN models (not used here, but kept for completeness)
         tokenizer = Tokenizer(num_words=vocab_size, oov_token="<OOV>")
         tokenizer.fit_on_texts(oversampled_train_df["text"])
         
