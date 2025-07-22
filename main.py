@@ -1,5 +1,3 @@
-
-
 """
 Main script for running emotion detection training (non-Colab version)
 """
@@ -47,7 +45,9 @@ def main():
             cache_dir=cache_dir,
             save_path=save_path,
             selected_emotions=selected_emotions,
-            **config
+            num_train=config["num_train"],
+            epochs=config["num_epochs"],
+            batch_size=config["batch_size"]
         )
         
         print("\n🎉 Training completed successfully!")
