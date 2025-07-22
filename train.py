@@ -2,14 +2,14 @@ import os
 from data_utils import load_and_filter_goemotions, oversample_training_data, prepare_tokenized_datasets
 from model_utils import create_tf_datasets, setup_model_and_optimizer, compile_and_train, save_model_and_tokenizer
 
-def train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5, batch_size=16):
+def train_emotion_model(cache_dir, save_path, selected_emotions, num_train=5000, epochs=5, batch_size=16):
     print("Starting training...")
     # Create cache directory
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
     print(f"Cache directory ready: {cache_dir}")
 
-    train_df, valid_df, test_df, sel_indices = load_and_filter_goemotions(cache_dir, emotions, num_train)
+    train_df, valid_df, test_df, sel_indices = load_and_filter_goemotions(cache_dir, selected_emotions, num_train)
     oversampled_train_df = oversample_training_data(train_df)
     
     from transformers import AutoTokenizer
@@ -19,7 +19,7 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5
 
     tf_train, tf_val, tf_test = create_tf_datasets(tokenized_train, tokenized_valid, tokenized_test, tokenizer, sel_indices, batch_size)
 
-    model, optimizer = setup_model_and_optimizer("distilbert-base-uncased", len(emotions), tf_train, epochs, cache_dir=cache_dir)
+    model, optimizer = setup_model_and_optimizer("distilbert-base-uncased", len(selected_emotions), tf_train, epochs, cache_dir=cache_dir)
 
     model = compile_and_train(model, optimizer, tf_train, tf_val, epochs)
 
@@ -35,3 +35,4 @@ if __name__ == "__main__":
     emotions = ["anger", "sadness", "joy", "disgust", "fear", "surprise", "gratitude", "remorse", "curiosity", "neutral"]
 
     train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5, batch_size=16)
+
