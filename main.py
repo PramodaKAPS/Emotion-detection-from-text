@@ -1,33 +1,31 @@
 """
-Main script for running emotion detection training in Google Colab
+Main script for running emotion detection training (non-Colab version)
 """
-from setup import setup_cache_directory, mount_google_drive
+import os
+from setup import setup_cache_directory
 from train import train_emotion_model
 
 def main():
     """
-    Main function to run emotion detection training in Google Colab
+    Main function to run emotion detection training on Droplet or local machine
     """
-    print("🚀 Starting Emotion Detection Training in Google Colab")
+    print("🚀 Starting Emotion Detection Training")
     print("=" * 60)
-    
-    # Mount Google Drive
-    mount_google_drive()
     
     # Setup cache directory
     cache_dir = setup_cache_directory()
     
     # Training configuration
-    save_path = "./emotion_model"  # Local folder on droplet
-    os.makedirs(save_dir, exist_ok=True)  # Create if not exists
+    save_path = "./emotion_model"  # Local folder (change if needed, e.g., "/root/emotion_model")
+    os.makedirs(save_path, exist_ok=True)  # Create if not exists
     selected_emotions = [
         "anger", "sadness", "joy", "disgust", "fear", 
         "surprise", "gratitude", "remorse", "curiosity", "neutral"
     ]
     
-    # Training parameters
+    # Training parameters (updated num_train to 2000)
     config = {
-        "num_train": 800,
+        "num_train": 2000,
         "num_epochs": 1,
         "batch_size": 16
     }
@@ -60,3 +58,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
