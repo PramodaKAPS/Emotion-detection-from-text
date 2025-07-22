@@ -1,16 +1,15 @@
 import os
-import tensorflow as tf
-
 import numpy as np
-from model_utils import (create_tf_datasets, setup_model_and_optimizer, compile_and_train, save_model_and_tokenizer,
-                         evaluate_model, create_rnn_model)
-from data_utils import load_and_filter_goemotions, oversample_training_data, prepare_tokenized_datasets
+import tensorflow as tf
 from transformers import AutoTokenizer
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from data_utils import load_and_filter_goemotions, oversample_training_data, prepare_tokenized_datasets
+from model_utils import create_tf_datasets, setup_model_and_optimizer, compile_and_train, save_model_and_tokenizer, create_rnn_model, evaluate_model
 
 def train_emotion_model(cache_dir, save_path, emotions, num_train=5000, epochs=5, batch_size=16, learning_rate=2e-5, model_type="DistilBERT", input_length=100, vocab_size=10000, embedding_dim=128):
-    print("Starting training...")
+    print(f"Starting training for {model_type}...")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
     print(f"Cache directory ready: {cache_dir}")
