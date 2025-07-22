@@ -1,3 +1,5 @@
+
+
 """
 Main script for running emotion detection training (non-Colab version)
 """
@@ -23,10 +25,10 @@ def main():
         "surprise", "gratitude", "remorse", "curiosity", "neutral"
     ]
     
-    # Training parameters (updated num_train to 2000)
+    # Training parameters (updated: 5000 training samples, 5 epochs)
     config = {
-        "num_train": 2000,
-        "num_epochs": 1,
+        "num_train": 5000,
+        "num_epochs": 5,
         "batch_size": 16
     }
     
@@ -58,4 +60,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
