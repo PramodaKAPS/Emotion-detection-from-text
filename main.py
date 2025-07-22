@@ -26,7 +26,7 @@ def main():
     # Training parameters (updated: 5000 training samples, 5 epochs)
     config = {
         "num_train": 5000,
-        "num_epochs": 5,
+        "num_epochs": 4,
         "batch_size": 16
     }
     
