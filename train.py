@@ -8,12 +8,13 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, AdamW, get_scheduler
+from torch.optim import AdamW  # Import AdamW from torch.optim
+from transformers import AutoTokenizer, get_scheduler
 from transformers.models.deberta_v3 import DebertaV3ForSequenceClassification
 from focal_loss.focal_loss import FocalLoss  # pip install focal_loss_torch
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from datasets import Dataset
-from imbalanced_learn.over_sampling import RandomOverSampler
+from imblearn.over_sampling import RandomOverSampler
 import pandas as pd
 from datasets import load_dataset
 
