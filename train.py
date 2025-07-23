@@ -10,7 +10,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim import AdamW  # Import AdamW from torch.optim
 from transformers import AutoTokenizer, get_scheduler
-from transformers.models.deberta_v3 import DebertaV3ForSequenceClassification
+from transformers import DebertaV2ForSequenceClassification  # Use DebertaV2 for v3 models
 from focal_loss.focal_loss import FocalLoss  # pip install focal_loss_torch
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from datasets import Dataset
@@ -131,7 +131,7 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
     test_loader = DataLoader(tokenized_test, batch_size=batch_size)
 
     # Model setup
-    model = DebertaV3ForSequenceClassification.from_pretrained("microsoft/deberta-v3-large", num_labels=len(emotions), cache_dir=cache_dir)
+    model = DebertaV2ForSequenceClassification.from_pretrained("microsoft/deberta-v3-large", num_labels=len(emotions), cache_dir=cache_dir)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
@@ -220,3 +220,4 @@ if __name__ == "__main__":
     # Run training with 2000 samples to check functionality
     metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large")
     print("\nTraining completed successfully with 2000 samples! Metrics indicate the script is working.")
+
