@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
-from transformers import AutoTokenizer, get_scheduler
+from transformers import get_scheduler, DebertaV2Tokenizer  # Use specific tokenizer for DeBERTa-v3
 from transformers import DebertaV2ForSequenceClassification
 from focal_loss.focal_loss import FocalLoss  # From focal-loss-torch package
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
@@ -113,9 +113,9 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
 
     oversampled_train_df = oversample_training_data(train_df)
 
-    # Force slow tokenizer to bypass tiktoken/conversion issues
-    tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir, use_fast=False)
-    print("Slow tokenizer loaded successfully.")
+    # Use specific slow tokenizer for DeBERTa-v3 to avoid conversion issues
+    tokenizer = DebertaV2Tokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir)
+    print("Tokenizer loaded successfully.")
 
     tokenized_train, tokenized_valid, tokenized_test = prepare_tokenized_datasets(tokenizer, oversampled_train_df, valid_df, test_df)
 
@@ -208,3 +208,4 @@ if __name__ == "__main__":
 
     metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large")
     print("\nTraining completed successfully with 2000 samples! Metrics indicate the script is working.")
+
