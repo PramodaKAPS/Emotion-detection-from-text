@@ -8,17 +8,17 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from torch.optim import AdamW  # Import AdamW from torch.optim
+from torch.optim import AdamW
 from transformers import AutoTokenizer, get_scheduler
-from transformers import DebertaV2ForSequenceClassification  # Use DebertaV2 for v3 models
-from focal_loss.focal_loss import FocalLoss  # pip install focal_loss_torch
+from transformers import DebertaV2ForSequenceClassification
+from focal_loss.focal_loss import FocalLoss  # From focal_loss_torch package
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from datasets import Dataset
 from imblearn.over_sampling import RandomOverSampler
 import pandas as pd
 from datasets import load_dataset
 
-# Section 1: Dataset Loading and Filtering (from data_utils)
+# Dataset Loading and Filtering
 def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
     print("Loading GoEmotions dataset...")
     dataset = load_dataset("go_emotions", "simplified", cache_dir=cache_dir)
@@ -67,7 +67,7 @@ def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
     
     return train_df, valid_df, test_df, selected_indices
 
-# Section 2: Oversampling (from data_utils)
+# Oversampling
 def oversample_training_data(train_df):
     X = train_df["text"].values.reshape(-1, 1)
     y = train_df["label"]
@@ -78,7 +78,7 @@ def oversample_training_data(train_df):
     print(df_resampled["label"].value_counts())
     return df_resampled
 
-# Section 3: Tokenization (from data_utils, adapted for PyTorch)
+# Tokenization
 def prepare_tokenized_datasets(tokenizer, train_df, valid_df, test_df):
     def tokenize(batch):
         return tokenizer(batch["text"], truncation=True, padding=True, return_tensors="pt")
@@ -97,14 +97,13 @@ def prepare_tokenized_datasets(tokenizer, train_df, valid_df, test_df):
 
     return tokenized_train, tokenized_valid, tokenized_test
 
-# Training function (updated for PyTorch)
+# Training function
 def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large"):
     print(f"Starting training for {model_type} with {num_train} samples...")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
     print(f"Cache directory ready: {cache_dir}")
 
-    # Load and filter data
     train_df, valid_df, test_df, sel_indices = load_and_filter_goemotions(cache_dir, emotions, num_train)
     if num_train > 0:
         train_df = train_df.head(num_train)
@@ -112,25 +111,26 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
     if train_df.empty:
         raise ValueError("Train DataFrame is empty after filtering. Check selected emotions or dataset loading.")
 
-    # Oversample
     oversampled_train_df = oversample_training_data(train_df)
 
-    # Tokenization
-    tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir)
+    # Tokenizer with fallback to slow tokenizer
+    try:
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir, use_fast=True)
+    except Exception as e:
+        print(f"Fast tokenizer failed: {e}. Falling back to slow tokenizer.")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir, use_fast=False)
+
     tokenized_train, tokenized_valid, tokenized_test = prepare_tokenized_datasets(tokenizer, oversampled_train_df, valid_df, test_df)
 
-    # Label remapping
     mapping = {old: new for new, old in enumerate(sel_indices)}
     tokenized_train = tokenized_train.map(lambda x: {"label": mapping[x["label"]]})
     tokenized_valid = tokenized_valid.map(lambda x: {"label": mapping[x["label"]]})
     tokenized_test = tokenized_test.map(lambda x: {"label": mapping[x["label"]]})
 
-    # PyTorch DataLoaders
     train_loader = DataLoader(tokenized_train, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(tokenized_valid, batch_size=batch_size)
     test_loader = DataLoader(tokenized_test, batch_size=batch_size)
 
-    # Model setup
     model = DebertaV2ForSequenceClassification.from_pretrained("microsoft/deberta-v3-large", num_labels=len(emotions), cache_dir=cache_dir)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -141,7 +141,6 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
 
     criterion = FocalLoss(gamma=2)  # Focal loss for class imbalance
 
-    # Training loop with early stopping
     best_val_loss = float('inf')
     patience = 3
     patience_counter = 0
@@ -160,7 +159,6 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
             total_loss += loss.item()
         print(f"Epoch {epoch+1}/{epochs} - Train Loss: {total_loss / len(train_loader):.4f}")
 
-        # Validation
         model.eval()
         val_loss = 0
         with torch.no_grad():
@@ -181,16 +179,10 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
                 print("Early stopping triggered.")
                 break
 
-    # Ensemble placeholder: For expansion, train multiple models and average predictions
-    # e.g., models = [model] + [train_additional_model() for _ in range(2)]
-    # Then, for prediction: avg_logits = sum(m(**inputs).logits for m in models) / len(models)
-
-    # Save model and tokenizer
     model.save_pretrained(save_path)
     tokenizer.save_pretrained(save_path)
-    print(f"Model saved at {save_path}")
+    print(f"Model saved at riqu {save_path}")
 
-    # Evaluation
     model.eval()
     y_true, y_pred = [], []
     with torch.no_grad():
@@ -217,7 +209,5 @@ if __name__ == "__main__":
     save_path = "/root/emotion_model_deberta"
     emotions = ["anger", "sadness", "joy", "disgust", "fear", "surprise", "gratitude", "remorse", "curiosity", "neutral"]
 
-    # Run training with 2000 samples to check functionality
     metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large")
     print("\nTraining completed successfully with 2000 samples! Metrics indicate the script is working.")
-
