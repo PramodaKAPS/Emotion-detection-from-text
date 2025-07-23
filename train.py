@@ -1,73 +1,107 @@
 import os
 import numpy as np
-import tensorflow as tf
-from transformers import AutoTokenizer, TFDebertaV3ForSequenceClassification, create_optimizer
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
-from focal_loss import SparseCategoricalFocalLoss  # Install via pip install focal-loss
+import torch
+import torch.nn as nn
+from transformers import AutoTokenizer, DebertaV3ForSequenceClassification, AdamW, get_scheduler
+from torch.utils.data import DataLoader
+from focal_loss.focal_loss import FocalLoss  # pip install focal_loss_torch
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from data_utils import load_and_filter_goemotions, oversample_training_data, prepare_tokenized_datasets
-from model_utils import create_tf_datasets, save_model_and_tokenizer, evaluate_model
+from model_utils import create_tf_datasets, save_model_and_tokenizer, evaluate_model  # Update these for PyTorch if needed
 
 def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large"):
     print(f"Starting training for {model_type} with {num_train} samples...")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
-    print(f"Cache directory ready: {cache_dir}")
 
-    # Load and filter GoEmotions dataset, limit to num_train for testing
     train_df, valid_df, test_df, sel_indices = load_and_filter_goemotions(cache_dir, emotions, num_train)
     if num_train > 0:
-        train_df = train_df.head(num_train)  # Limit to 2000 samples for quick check
+        train_df = train_df.head(num_train)
 
     if train_df.empty:
-        raise ValueError("Train DataFrame is empty after filtering. Check selected emotions or dataset loading.")
+        raise ValueError("Train DataFrame is empty after filtering.")
 
-    # Oversample to balance classes
     oversampled_train_df = oversample_training_data(train_df)
 
-    # Tokenization for DeBERTa-v3-large
     tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir)
     tokenized_train, tokenized_valid, tokenized_test = prepare_tokenized_datasets(tokenizer, oversampled_train_df, valid_df, test_df)
 
-    # Create TF datasets with label remapping
-    mapping = {old: new for new, old in enumerate(sel_indices)}
-    tf_train, tf_val, tf_test = create_tf_datasets(tokenized_train, tokenized_valid, tokenized_test, tokenizer, sel_indices, batch_size)
+    # PyTorch DataLoaders (replace create_tf_datasets)
+    train_loader = DataLoader(tokenized_train, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(tokenized_valid, batch_size=batch_size)
+    test_loader = DataLoader(tokenized_test, batch_size=batch_size)
 
-    # Setup DeBERTa-v3-large model and optimizer
-    model = TFDebertaV3ForSequenceClassification.from_pretrained("microsoft/deberta-v3-large", num_labels=len(emotions), cache_dir=cache_dir)
-    steps = len(tf_train) * epochs
-    optimizer, schedule = create_optimizer(learning_rate, 0, steps)
+    model = DebertaV3ForSequenceClassification.from_pretrained("microsoft/deberta-v3-large", num_labels=len(emotions), cache_dir=cache_dir)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
 
-    # Compile with focal loss
-    model.compile(optimizer=optimizer, loss=SparseCategoricalFocalLoss(gamma=2), metrics=["accuracy"])
+    optimizer = AdamW(model.parameters(), lr=learning_rate)
+    num_training_steps = epochs * len(train_loader)
+    scheduler = get_scheduler("linear", optimizer, num_warmup_steps=0, num_training_steps=num_training_steps)
 
-    # Callbacks: Early stopping and LR scheduler
-    early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
-    lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=2, min_lr=1e-7)
+    criterion = FocalLoss(gamma=2)  # Focal loss
 
-    # Train the model
-    history = model.fit(tf_train, validation_data=tf_val, epochs=epochs, callbacks=[early_stopping, lr_scheduler])
+    # Training loop with early stopping (manual implementation)
+    best_val_loss = float('inf')
+    patience = 3
+    for epoch in range(epochs):
+        model.train()
+        for batch in train_loader:
+            inputs = {k: v.to(device) for k, v in batch.items() if k != 'labels'}
+            labels = batch['labels'].to(device)
+            outputs = model(**inputs)
+            loss = criterion(outputs.logits, labels)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
 
-    # Ensemble expansion placeholder: Train multiple models and average predictions
-    # Example: models = [model] + [train_additional_model() for _ in range(2)]  # Expand here for ensemble
-    # For now, single model; in ensemble, predict via np.mean([m.predict(...) for m in models], axis=0)
+        # Validation
+        model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for batch in val_loader:
+                inputs = {k: v.to(device) for k, v in batch.items() if k != 'labels'}
+                labels = batch['labels'].to(device)
+                outputs = model(**inputs)
+                val_loss += criterion(outputs.logits, labels).item()
+        val_loss /= len(val_loader)
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print("Early stopping")
+                break
 
-    # Save model and tokenizer
-    save_model_and_tokenizer(model, tokenizer, save_path, is_distilbert=False)
+    # Save and evaluate (adapt evaluate_model for PyTorch)
+    model.save_pretrained(save_path)
+    tokenizer.save_pretrained(save_path)
 
-    # Evaluate and print metrics to check if it works
-    metrics = evaluate_model(model, tf_test)
-    print("\nTest Metrics on 2000-sample run:")
-    print(f"Accuracy: {metrics['accuracy']:.2f} | F1 Score: {metrics['f1']:.2f} | Precision: {metrics['precision']:.2f} | Recall: {metrics['recall']:.2f}")
-
+    # Evaluation (simplified; adapt as needed)
+    y_true, y_pred = [], []
+    with torch.no_grad():
+        for batch in test_loader:
+            inputs = {k: v.to(device) for k, v in batch.items() if k != 'labels'}
+            labels = batch['labels'].cpu().numpy()
+            outputs = model(**inputs)
+            preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+            y_true.extend(labels)
+            y_pred.extend(preds)
+    metrics = {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "f1": f1_score(y_true, y_pred, average='weighted'),
+        "precision": precision_score(y_true, y_pred, average='weighted'),
+        "recall": recall_score(y_true, y_pred, average='weighted')
+    }
+    print("\nTest Metrics:", metrics)
     return metrics
 
 if __name__ == "__main__":
     cache_dir = "/root/huggingface_cache"
     save_path = "/root/emotion_model_deberta"
     emotions = ["anger", "sadness", "joy", "disgust", "fear", "surprise", "gratitude", "remorse", "curiosity", "neutral"]
+    metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=2000)
 
-    # Run training with 2000 samples to check functionality
-    metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large")
-    print("\nTraining completed successfully with 2000 samples! Metrics indicate the script is working.")
 
