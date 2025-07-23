@@ -8,6 +8,8 @@ from focal_loss.focal_loss import FocalLoss  # pip install focal_loss_torch
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from data_utils import load_and_filter_goemotions, oversample_training_data, prepare_tokenized_datasets
 from model_utils import create_tf_datasets, save_model_and_tokenizer, evaluate_model  # Update these for PyTorch if needed
+from transformers import AutoTokenizer, DebertaV3ForSequenceClassification, AdamW, get_scheduler
+
 
 def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large"):
     print(f"Starting training for {model_type} with {num_train} samples...")
