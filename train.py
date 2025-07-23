@@ -113,7 +113,10 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
 
     oversampled_train_df = oversample_training_data(train_df)
 
-    tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir)
+    # Force slow tokenizer to bypass tiktoken/conversion issues
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir, use_fast=False)
+    print("Slow tokenizer loaded successfully.")
+
     tokenized_train, tokenized_valid, tokenized_test = prepare_tokenized_datasets(tokenizer, oversampled_train_df, valid_df, test_df)
 
     mapping = {old: new for new, old in enumerate(sel_indices)}
