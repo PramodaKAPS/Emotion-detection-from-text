@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from transformers import AutoTokenizer, get_scheduler
 from transformers import DebertaV2ForSequenceClassification
-from focal_loss.focal_loss import FocalLoss  # From focal_loss_torch package
+from focal_loss.focal_loss import FocalLoss  # From focal-loss-torch package
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from datasets import Dataset
 from imblearn.over_sampling import RandomOverSampler
@@ -113,13 +113,7 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
 
     oversampled_train_df = oversample_training_data(train_df)
 
-    # Tokenizer with fallback to slow tokenizer
-    try:
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir, use_fast=True)
-    except Exception as e:
-        print(f"Fast tokenizer failed: {e}. Falling back to slow tokenizer.")
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir, use_fast=False)
-
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/deberta-v3-large", cache_dir=cache_dir)
     tokenized_train, tokenized_valid, tokenized_test = prepare_tokenized_datasets(tokenizer, oversampled_train_df, valid_df, test_df)
 
     mapping = {old: new for new, old in enumerate(sel_indices)}
@@ -181,7 +175,7 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
 
     model.save_pretrained(save_path)
     tokenizer.save_pretrained(save_path)
-    print(f"Model saved at riqu {save_path}")
+    print(f"Model saved at {save_path}")
 
     model.eval()
     y_true, y_pred = [], []
