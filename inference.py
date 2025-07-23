@@ -3,6 +3,7 @@ Inference utilities for emotion detection
 """
 import numpy as np
 from transformers import AutoTokenizer, TFDistilBertForSequenceClassification
+import emoji  # Added for emoji handling
 
 class EmotionDetector:
     """
@@ -22,6 +23,12 @@ class EmotionDetector:
         self.model = TFDistilBertForSequenceClassification.from_pretrained(model_path)
         print(f"✅ Emotion detector loaded from {model_path}")
     
+    def convert_emojis_to_text(self, text):
+        """
+        Convert emojis to descriptive text for better model handling
+        """
+        return emoji.demojize(text, delimiters=("", ""))
+    
     def predict_emotion(self, text):
         """
         Predict emotion for input text
@@ -32,7 +39,9 @@ class EmotionDetector:
         Returns:
             str: Predicted emotion name
         """
-        inputs = self.tokenizer(text, return_tensors="tf", truncation=True, padding=True)
+        # Handle emojis during inference
+        processed_text = self.convert_emojis_to_text(text)
+        inputs = self.tokenizer(processed_text, return_tensors="tf", truncation=True, padding=True)
         logits = self.model(inputs).logits
         prediction = np.argmax(logits, axis=1)[0]
         return self.emotions[prediction]
@@ -47,7 +56,9 @@ class EmotionDetector:
         Returns:
             dict: Dictionary with predicted emotion and confidence scores
         """
-        inputs = self.tokenizer(text, return_tensors="tf", truncation=True, padding=True)
+        # Handle emojis during inference
+        processed_text = self.convert_emojis_to_text(text)
+        inputs = self.tokenizer(processed_text, return_tensors="tf", truncation=True, padding=True)
         logits = self.model(inputs).logits
         
         # Apply softmax to get probabilities
@@ -108,11 +119,12 @@ def interactive_emotion_detection(model_path, emotions_list):
             print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
-    # Example usage
-    model_path = "/content/drive/MyDrive/emotion_model"
+    # Example usage (update to your local path)
+    model_path = "E:\\document\\emotionmodelBERT"  # Your downloaded model path
     emotions_list = [
         "anger", "sadness", "joy", "disgust", "fear", 
         "surprise", "gratitude", "remorse", "curiosity", "neutral"
     ]
     
     interactive_emotion_detection(model_path, emotions_list)
+
