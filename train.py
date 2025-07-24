@@ -1,7 +1,7 @@
 """
 Updated train.py for PyTorch-based DeBERTa-v3-large emotion detection training.
 Integrates focal loss, early stopping, learning rate scheduler, and ensemble placeholder.
-Uses 2000 samples from GoEmotions for initial testing.
+Uses the full filtered GoEmotions dataset (num_train=0).
 Includes custom collate for handling variable-length sequences.
 """
 
@@ -107,7 +107,7 @@ def custom_collate(batch, tokenizer):
     return {'input_ids': input_ids, 'attention_mask': attention_mask, 'label': labels}
 
 # Training function
-def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large"):
+def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large"):
     print(f"Starting training for {model_type} with {num_train} samples...")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
@@ -209,7 +209,7 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
         "precision": precision_score(y_true, y_pred, average='weighted'),
         "recall": recall_score(y_true, y_pred, average='weighted')
     }
-    print("\nTest Metrics on 2000-sample run:")
+    print("\nTest Metrics on full dataset run:")
     print(f"Accuracy: {metrics['accuracy']:.2f} | F1 Score: {metrics['f1']:.2f} | Precision: {metrics['precision']:.2f} | Recall: {metrics['recall']:.2f}")
 
     return metrics
@@ -219,5 +219,5 @@ if __name__ == "__main__":
     save_path = "/root/emotion_model_deberta"
     emotions = ["anger", "sadness", "joy", "disgust", "fear", "surprise", "gratitude", "remorse", "curiosity", "neutral"]
 
-    metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large")
-    print("\nTraining completed successfully with 2000 samples! Metrics indicate the script is working.")
+    metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large")
+    print("\nTraining completed successfully with full dataset! Metrics indicate the script is working.")
