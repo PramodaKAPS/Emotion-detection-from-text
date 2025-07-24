@@ -1,8 +1,7 @@
 """
-Updated train.py for PyTorch-based DeBERTa-v3-large emotion detection training.
-Integrates focal loss, early stopping, learning rate scheduler, and ensemble placeholder.
-Uses the full filtered GoEmotions dataset (num_train=0).
-Includes custom collate for handling variable-length sequences.
+Updated train.py for PyTorch-based DeBERTa-v3-large emotion detection training on full GoEmotions dataset.
+Integrates focal loss, early stopping, learning rate scheduler, ensemble placeholder, mixed precision, gradient accumulation, and gradient clipping to handle OOM and NaN issues.
+Effective batch size 64 with actual 16 + accumulation 4.
 """
 
 import os
@@ -19,6 +18,7 @@ from imblearn.over_sampling import RandomOverSampler
 import pandas as pd
 from datasets import load_dataset
 from torch.nn.utils.rnn import pad_sequence  # For dynamic padding in collate
+from torch.cuda.amp import autocast, GradScaler  # For mixed precision
 
 # Dataset Loading and Filtering
 def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
@@ -83,7 +83,7 @@ def oversample_training_data(train_df):
 # Tokenization
 def prepare_tokenized_datasets(tokenizer, train_df, valid_df, test_df):
     def tokenize(batch):
-        return tokenizer(batch["text"], truncation=True, padding='longest', return_tensors="pt")  # Use 'longest' for dynamic padding prep
+        return tokenizer(batch["text"], truncation=True, padding='longest', max_length=128, return_tensors="pt")  # Limit max_length to save memory
 
     train_dataset = Dataset.from_pandas(train_df)
     valid_dataset = Dataset.from_pandas(valid_df)
@@ -107,7 +107,7 @@ def custom_collate(batch, tokenizer):
     return {'input_ids': input_ids, 'attention_mask': attention_mask, 'label': labels}
 
 # Training function
-def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large"):
+def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, batch_size=16, learning_rate=1e-5, model_type="DeBERTa-v3-large"):
     print(f"Starting training for {model_type} with {num_train} samples...")
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir, exist_ok=True)
@@ -145,11 +145,14 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    optimizer = AdamW(model.parameters(), lr=learning_rate)
+    optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)  # Added weight decay
     num_training_steps = epochs * len(train_loader)
     scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps)
 
     criterion = FocalLoss(gamma=2)  # Focal loss for class imbalance
+    scaler = GradScaler()  # For mixed precision
+
+    accumulation_steps = 4  # Gradient accumulation for effective batch size of 64
 
     best_val_loss = float('inf')
     patience = 3
@@ -157,26 +160,38 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, 
     for epoch in range(epochs):
         model.train()
         total_loss = 0
+        optimizer.zero_grad()
+        step = 0
         for batch in train_loader:
-            inputs = {k: v.to(device) for k, v in batch.items() if k in tokenizer.model_input_names}
-            labels = batch['label'].to(device)
-            outputs = model(**inputs)
-            loss = criterion(outputs.logits, labels)
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            total_loss += loss.item()
+            with autocast():
+                inputs = {k: v.to(device) for k, v in batch.items() if k in tokenizer.model_input_names}
+                labels = batch['label'].to(device)
+                outputs = model(**inputs)
+                loss = criterion(outputs.logits, labels) / accumulation_steps
+            scaler.scale(loss).backward()
+
+            step += 1
+            if step % accumulation_steps == 0:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Gradient clipping
+                scaler.step(optimizer)
+                scaler.update()
+                scheduler.step()
+                optimizer.zero_grad()
+
+            total_loss += loss.item() * accumulation_steps  # Adjust for accumulation
+
         print(f"Epoch {epoch+1}/{epochs} - Train Loss: {total_loss / len(train_loader):.4f}")
 
         model.eval()
         val_loss = 0
         with torch.no_grad():
             for batch in val_loader:
-                inputs = {k: v.to(device) for k, v in batch.items() if k in tokenizer.model_input_names}
-                labels = batch['label'].to(device)
-                outputs = model(**inputs)
-                val_loss += criterion(outputs.logits, labels).item()
+                with autocast():
+                    inputs = {k: v.to(device) for k, v in batch.items() if k in tokenizer.model_input_names}
+                    labels = batch['label'].to(device)
+                    outputs = model(**inputs)
+                    val_loss += criterion(outputs.logits, labels).item()
         val_loss /= len(val_loader)
         print(f"Validation Loss: {val_loss:.4f}")
 
@@ -197,12 +212,13 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, 
     y_true, y_pred = [], []
     with torch.no_grad():
         for batch in test_loader:
-            inputs = {k: v.to(device) for k, v in batch.items() if k in tokenizer.model_input_names}
-            labels = batch['label'].cpu().numpy()
-            outputs = model(**inputs)
-            preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
-            y_true.extend(labels)
-            y_pred.extend(preds)
+            with autocast():
+                inputs = {k: v.to(device) for k, v in batch.items() if k in tokenizer.model_input_names}
+                labels = batch['label'].cpu().numpy()
+                outputs = model(**inputs)
+                preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+                y_true.extend(labels)
+                y_pred.extend(preds)
     metrics = {
         "accuracy": accuracy_score(y_true, y_pred),
         "f1": f1_score(y_true, y_pred, average='weighted'),
@@ -219,5 +235,5 @@ if __name__ == "__main__":
     save_path = "/root/emotion_model_deberta"
     emotions = ["anger", "sadness", "joy", "disgust", "fear", "surprise", "gratitude", "remorse", "curiosity", "neutral"]
 
-    metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large")
+    metrics = train_emotion_model(cache_dir, save_path, emotions, num_train=0, epochs=10, batch_size=16, learning_rate=1e-5, model_type="DeBERTa-v3-large")
     print("\nTraining completed successfully with full dataset! Metrics indicate the script is working.")
