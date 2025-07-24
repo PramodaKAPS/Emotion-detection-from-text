@@ -2,6 +2,7 @@
 Updated train.py for PyTorch-based DeBERTa-v3-large emotion detection training.
 Integrates focal loss, early stopping, learning rate scheduler, and ensemble placeholder.
 Uses 2000 samples from GoEmotions for initial testing.
+Includes custom collate for handling variable-length sequences.
 """
 
 import os
@@ -17,6 +18,7 @@ from datasets import Dataset
 from imblearn.over_sampling import RandomOverSampler
 import pandas as pd
 from datasets import load_dataset
+from torch.nn.utils.rnn import pad_sequence  # For dynamic padding in collate
 
 # Dataset Loading and Filtering
 def load_and_filter_goemotions(cache_dir, selected_emotions, num_train=0):
@@ -81,7 +83,7 @@ def oversample_training_data(train_df):
 # Tokenization
 def prepare_tokenized_datasets(tokenizer, train_df, valid_df, test_df):
     def tokenize(batch):
-        return tokenizer(batch["text"], truncation=True, padding=True, return_tensors="pt")
+        return tokenizer(batch["text"], truncation=True, padding='longest', return_tensors="pt")  # Use 'longest' for dynamic padding prep
 
     train_dataset = Dataset.from_pandas(train_df)
     valid_dataset = Dataset.from_pandas(valid_df)
@@ -96,6 +98,13 @@ def prepare_tokenized_datasets(tokenizer, train_df, valid_df, test_df):
     tokenized_test.set_format("torch")
 
     return tokenized_train, tokenized_valid, tokenized_test
+
+# Custom collate for dynamic padding
+def custom_collate(batch, tokenizer):
+    input_ids = pad_sequence([item['input_ids'] for item in batch], batch_first=True, padding_value=tokenizer.pad_token_id)
+    attention_mask = pad_sequence([item['attention_mask'] for item in batch], batch_first=True, padding_value=0)
+    labels = torch.stack([item['label'] for item in batch])
+    return {'input_ids': input_ids, 'attention_mask': attention_mask, 'label': labels}
 
 # Training function
 def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=10, batch_size=64, learning_rate=3e-5, model_type="DeBERTa-v3-large"):
@@ -127,9 +136,10 @@ def train_emotion_model(cache_dir, save_path, emotions, num_train=2000, epochs=1
     tokenized_valid = tokenized_valid.map(map_label)
     tokenized_test = tokenized_test.map(map_label)
 
-    train_loader = DataLoader(tokenized_train, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(tokenized_valid, batch_size=batch_size)
-    test_loader = DataLoader(tokenized_test, batch_size=batch_size)
+    # DataLoaders with custom collate
+    train_loader = DataLoader(tokenized_train, batch_size=batch_size, shuffle=True, collate_fn=lambda batch: custom_collate(batch, tokenizer))
+    val_loader = DataLoader(tokenized_valid, batch_size=batch_size, collate_fn=lambda batch: custom_collate(batch, tokenizer))
+    test_loader = DataLoader(tokenized_test, batch_size=batch_size, collate_fn=lambda batch: custom_collate(batch, tokenizer))
 
     model = DebertaV2ForSequenceClassification.from_pretrained("microsoft/deberta-v3-large", num_labels=len(emotions), cache_dir=cache_dir)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
