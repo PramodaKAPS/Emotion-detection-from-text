@@ -3,14 +3,20 @@ huggingface-hub==0.21.4
 transformers==4.40.2
 fsspec==2023.12.2
 tokenizers==0.19.1
-tensorflow
-imbalanced-learn
-pandas
+imbalanced-learn==0.13.0
+pandas==2.3.1
 numpy==1.26.4
 pyarrow>=15.0.0
-scikit-learn  # New: for metrics like F1, Precision, Recall
-scikit-learn
-matplotlib
+scikit-learn==1.6.1
+matplotlib==3.10.3
+torch==2.4.0  # Latest stable with CUDA support; adjust for your system
+torchvision==0.19.0
+torchaudio==2.4.0
+focal-loss-torch==0.1.0  # For FocalLoss
+sentencepiece==0.2.0  # For tokenizer
+tiktoken==0.7.0  # For tokenizer conversion
+protobuf==5.29.5  # For tokenizer dependencies
+
 
 
 
